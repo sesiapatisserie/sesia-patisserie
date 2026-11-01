@@ -32,23 +32,29 @@ function estimate(product: string, people: number): string | null {
   return null;
 }
 
+/** Clé publique Web3Forms (envoi direct vers la boîte mail). Voir .env.example. */
+const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_KEY;
+
+type Status = "idle" | "sending" | "success" | "error";
+
 /**
- * Le formulaire compose un e-mail pré-rempli et l'ouvre dans le client de
- * messagerie du visiteur : aucun backend ni service tiers n'est nécessaire.
- * Pour un envoi direct, brancher ici une route API ou un service type Resend.
+ * Le formulaire envoie la demande directement à la boîte mail de la pâtisserie
+ * via Web3Forms, sans quitter le site. Si aucune clé n'est configurée, il
+ * retombe sur un e-mail pré-rempli ouvert dans la messagerie du visiteur.
  */
 export function OrderForm() {
   const [product, setProduct] = useState(orderPage.products[0].value);
   const [people, setPeople] = useState("");
-  const [sent, setSent] = useState(false);
+  const [status, setStatus] = useState<Status>("idle");
 
   const flavors = orderPage.products.find((p) => p.value === product)?.flavors ?? [];
   const peopleLabel = product === "Mignardises" ? "Nombre de pièces" : "Nombre de parts";
   const price = estimate(product, Number(people));
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const data = new FormData(event.currentTarget);
+    const form = event.currentTarget;
+    const data = new FormData(form);
     const fullName = `${data.get("prenom")} ${data.get("nom")}`.trim();
     const subject = `[Commande] ${product} — ${fullName}`;
     const body = [
@@ -70,14 +76,67 @@ export function OrderForm() {
       .filter((line, i, all) => line !== "" || all[i - 1] !== "")
       .join("\n");
 
-    window.location.href = `mailto:${contact.email}?subject=${encodeURIComponent(
-      subject,
-    )}&body=${encodeURIComponent(body)}`;
-    setSent(true);
+    // Sans clé : repli sur la messagerie du visiteur.
+    if (!accessKey) {
+      window.location.href = `mailto:${contact.email}?subject=${encodeURIComponent(
+        subject,
+      )}&body=${encodeURIComponent(body)}`;
+      setStatus("success");
+      return;
+    }
+
+    // Champ piège anti-spam : seuls les robots le remplissent.
+    if (data.get("botcheck")) return;
+
+    setStatus("sending");
+    try {
+      const response = await fetch("https://api.web3forms.com/submit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          access_key: accessKey,
+          subject,
+          from_name: "Site Sesia Pâtisserie",
+          name: fullName,
+          email: String(data.get("email") ?? ""),
+          phone: String(data.get("telephone") ?? ""),
+          message: body,
+        }),
+      });
+      const result = (await response.json()) as { success?: boolean };
+      if (!response.ok || !result.success) throw new Error("envoi refusé");
+      form.reset();
+      setPeople("");
+      setStatus("success");
+    } catch {
+      setStatus("error");
+    }
+  }
+
+  if (status === "success") {
+    return (
+      <div className="py-6 text-center" role="status">
+        <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-ink text-2xl text-gold-light">
+          ✓
+        </span>
+        <h3 className="mt-8 text-4xl text-ink">Merci pour votre demande&nbsp;!</h3>
+        <p className="mx-auto mt-5 max-w-md text-[1rem] leading-[1.8] text-ink-500">
+          Elle est bien arrivée. Je reviens vers vous très vite avec un devis personnalisé.
+        </p>
+        <button
+          type="button"
+          onClick={() => setStatus("idle")}
+          className="mt-9 rounded-full border border-ink/20 px-7 py-3.5 text-[0.72rem] font-medium uppercase tracking-[0.18em] text-ink transition-colors hover:bg-ink hover:text-cream"
+        >
+          Faire une autre demande
+        </button>
+      </div>
+    );
   }
 
   return (
     <form onSubmit={handleSubmit} className="space-y-12">
+      <input type="checkbox" name="botcheck" tabIndex={-1} autoComplete="off" aria-hidden className="hidden" />
       <fieldset>
         <legend className="flex items-center gap-4 font-display text-[1.7rem] text-ink">
           <span className="flex h-9 w-9 items-center justify-center rounded-full bg-ink font-sans text-xs text-cream">1</span>
@@ -239,18 +298,19 @@ export function OrderForm() {
         </p>
         <button
           type="submit"
-          className="group inline-flex shrink-0 items-center justify-center gap-3 rounded-full bg-ink px-9 py-4.5 text-[0.74rem] font-medium uppercase tracking-[0.2em] text-cream transition-colors duration-500 hover:bg-gold-dark"
+          disabled={status === "sending"}
+          className="group inline-flex shrink-0 items-center justify-center gap-3 rounded-full bg-ink px-9 py-4.5 text-[0.74rem] font-medium uppercase tracking-[0.2em] text-cream transition-colors duration-500 hover:bg-gold-dark disabled:cursor-wait disabled:opacity-60"
         >
-          Envoyer ma demande
+          {status === "sending" ? "Envoi en cours…" : "Envoyer ma demande"}
           <span aria-hidden className="transition-transform duration-500 group-hover:translate-x-1">
             &rarr;
           </span>
         </button>
       </div>
 
-      <p aria-live="polite" className="min-h-6 text-sm text-gold-dark">
-        {sent
-          ? "Votre messagerie vient de s'ouvrir avec la demande pré-remplie : il ne reste qu'à l'envoyer."
+      <p aria-live="polite" className="min-h-6 text-sm text-red-800">
+        {status === "error"
+          ? `L'envoi a échoué. Réessayez, ou contactez-moi directement au ${contact.phoneDisplay} ou à ${contact.email}.`
           : ""}
       </p>
     </form>
