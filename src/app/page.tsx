@@ -77,12 +77,12 @@ export default function HomePage() {
             >
               <div className="relative ml-auto aspect-[4/5] w-[78%] overflow-hidden rounded-t-full rounded-b-[2rem] shadow-[0_60px_100px_-60px_rgba(27,22,19,0.6)]">
                 <Image
-                  src={photos.numberCake50.src}
-                  alt={photos.numberCake50.alt}
+                  src={photos.numberCake18.src}
+                  alt={photos.numberCake18.alt}
                   fill
                   preload
                   sizes="(min-width: 1024px) 38vw, 78vw"
-                  className="animate-ken-burns object-cover object-[35%_center]"
+                  className="animate-ken-burns object-cover object-center"
                 />
               </div>
 
