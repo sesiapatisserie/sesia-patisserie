@@ -111,7 +111,137 @@ function button(href, label, primary) {
   return `<a href="${escapeHtml(href)}" style="display:inline-block;margin:0 8px 10px 0;padding:14px 26px;border-radius:999px;font:600 12px/1 ${SANS};letter-spacing:.16em;text-transform:uppercase;text-decoration:none;${style}">${escapeHtml(label)}</a>`;
 }
 
-export function renderHtml(order, receivedAt) {
+/* -------------------------------------------------------------------------- */
+/* Agenda (fichier .ics, compatible Calendrier Apple, Google Agenda, Outlook)  */
+/* -------------------------------------------------------------------------- */
+
+const icsEscape = (text) =>
+  String(text ?? "")
+    .replace(/\\/g, "\\\\")
+    .replace(/;/g, "\\;")
+    .replace(/,/g, "\\,")
+    .replace(/\r?\n/g, "\\n");
+
+/** Replie les lignes à 75 octets maximum (RFC 5545). */
+function foldLine(line) {
+  const encoder = new TextEncoder();
+  let out = "";
+  let current = "";
+  for (const char of Array.from(line)) {
+    if (encoder.encode(current + char).length > 74) {
+      out += `${current}\r\n `;
+      current = "";
+    }
+    current += char;
+  }
+  return out + current;
+}
+
+const pad = (value) => String(value).padStart(2, "0");
+
+/** Identifiant stable : plusieurs clics ne créent pas de doublon dans l'agenda. */
+function stableUid(order) {
+  const text = [order.prenom, order.nom, order.email, order.produit, order.date, order.heure].join("|");
+  let hash = 5381;
+  for (const char of text) hash = ((hash * 33) ^ char.codePointAt(0)) >>> 0;
+  return `${hash.toString(16)}-${order.date.replace(/-/g, "")}@${BRAND.site}`;
+}
+
+/** Description de l'événement : tout ce qu'il faut savoir le jour J. */
+function eventDescription(order) {
+  const lines = [
+    order.parfum && `Parfum : ${order.parfum}`,
+    order.quantite && `${order.quantiteLabel || "Quantité"} : ${order.quantite}`,
+    order.estimation && `Estimation : ${order.estimation}`,
+    "",
+    `Client : ${order.prenom} ${order.nom}`,
+    order.telephone && `Téléphone : ${order.telephone}`,
+    `E-mail : ${order.email}`,
+    order.message && "",
+    order.message && `Message : ${order.message}`,
+  ];
+  return lines.filter((line) => line !== undefined && line !== false && line !== null).join("\n");
+}
+
+/** Renvoie le contenu .ics, ou null si la commande n'a pas de date valide. */
+export function buildIcs(order, now = new Date()) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(order.date)) return null;
+  const [year, month, day] = order.date.split("-").map(Number);
+  const [hour, minute] = /^\d{2}:\d{2}$/.test(order.heure) ? order.heure.split(":").map(Number) : [9, 0];
+
+  const dayText = `${year}${pad(month)}${pad(day)}`;
+  const start = `${dayText}T${pad(hour)}${pad(minute)}00`;
+  const end = `${dayText}T${pad(Math.min(hour + 1, 23))}${pad(minute)}00`;
+  const stamp = now.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+  const title = `${order.produit} — ${order.prenom} ${order.nom}`;
+
+  const alarm = (trigger) => [
+    "BEGIN:VALARM",
+    "ACTION:DISPLAY",
+    `DESCRIPTION:${icsEscape(title)}`,
+    `TRIGGER:${trigger}`,
+    "END:VALARM",
+  ];
+
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Sesia Pâtisserie//Commandes//FR",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "BEGIN:VTIMEZONE",
+    "TZID:Europe/Paris",
+    "BEGIN:DAYLIGHT",
+    "TZOFFSETFROM:+0100",
+    "TZOFFSETTO:+0200",
+    "TZNAME:CEST",
+    "DTSTART:19700329T020000",
+    "RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU",
+    "END:DAYLIGHT",
+    "BEGIN:STANDARD",
+    "TZOFFSETFROM:+0200",
+    "TZOFFSETTO:+0100",
+    "TZNAME:CET",
+    "DTSTART:19701025T030000",
+    "RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU",
+    "END:STANDARD",
+    "END:VTIMEZONE",
+    "BEGIN:VEVENT",
+    `UID:${stableUid(order)}`,
+    `DTSTAMP:${stamp}`,
+    `DTSTART;TZID=Europe/Paris:${start}`,
+    `DTEND;TZID=Europe/Paris:${end}`,
+    `SUMMARY:${icsEscape(title)}`,
+    `DESCRIPTION:${icsEscape(eventDescription(order))}`,
+    "STATUS:CONFIRMED",
+    ...alarm("-P1D"),
+    ...alarm("-PT2H"),
+    "END:VEVENT",
+    "END:VCALENDAR",
+  ];
+  return `${lines.map(foldLine).join("\r\n")}\r\n`;
+}
+
+/** Lien du bouton « Ajouter à mon agenda » : le Worker régénère le .ics à la volée. */
+export function agendaUrl(order, siteUrl) {
+  const params = new URLSearchParams({
+    prenom: order.prenom,
+    nom: order.nom,
+    email: order.email,
+    telephone: order.telephone,
+    produit: order.produit,
+    parfum: order.parfum,
+    quantiteLabel: order.quantiteLabel,
+    quantite: order.quantite,
+    date: order.date,
+    heure: order.heure,
+    estimation: order.estimation,
+    message: order.message.slice(0, 400),
+  });
+  return `${siteUrl}/api/agenda?${params}`;
+}
+
+export function renderHtml(order, receivedAt, siteUrl = "https://www.sesia-patisserie.com") {
   const fullName = `${order.prenom} ${order.nom}`;
   const replySubject = encodeURIComponent(`Votre demande — ${BRAND.name}`);
   const phoneHref = order.telephone.replace(/[^\d+]/g, "");
@@ -163,6 +293,7 @@ export function renderHtml(order, receivedAt) {
     <tr><td style="padding:22px 40px 6px">
       ${button(`mailto:${order.email}?subject=${replySubject}`, `Répondre à ${order.prenom}`, true)}
       ${order.telephone ? button(`tel:${phoneHref}`, "Appeler", false) : ""}
+      ${order.date ? button(agendaUrl(order, siteUrl), "Ajouter à mon agenda", false) : ""}
     </td></tr>
 
     <tr><td style="padding:26px 40px 0">
@@ -227,8 +358,11 @@ export function renderText(order, receivedAt) {
 }
 
 /** Message MIME complet (multipart/alternative, UTF-8), prêt pour EmailMessage. */
-export function buildMime({ from, to, order, receivedAt }) {
-  const boundary = `sesia_${crypto.randomUUID().replace(/-/g, "")}`;
+export function buildMime({ from, to, order, receivedAt, siteUrl = "https://www.sesia-patisserie.com" }) {
+  const id = crypto.randomUUID().replace(/-/g, "");
+  const boundary = `sesia_alt_${id}`;
+  const mixed = `sesia_mix_${id}`;
+  const ics = buildIcs(order);
   const fullName = `${order.prenom} ${order.nom}`.replace(/["<>\\]/g, "");
   const subject = `Nouvelle demande de devis — ${order.produit} — ${fullName}`;
   const part = (type, body) =>
@@ -241,6 +375,33 @@ export function buildMime({ from, to, order, receivedAt }) {
       "",
     ].join("\r\n");
 
+  // Texte + HTML ; si la commande a une date, un fichier .ics est joint.
+  const alternativeHeader = `Content-Type: multipart/alternative; boundary="${boundary}"`;
+  const alternativeParts = [
+    part("text/plain", renderText(order, receivedAt)),
+    part("text/html", renderHtml(order, receivedAt, siteUrl)),
+    `--${boundary}--`,
+  ].join("\r\n");
+
+  const body = ics
+    ? [
+        `--${mixed}`,
+        alternativeHeader,
+        "",
+        alternativeParts,
+        "",
+        `--${mixed}`,
+        `Content-Type: text/calendar; charset=UTF-8; method=PUBLISH; name="commande-sesia.ics"`,
+        "Content-Transfer-Encoding: base64",
+        `Content-Disposition: attachment; filename="commande-sesia.ics"`,
+        "",
+        wrap76(toBase64(ics)),
+        "",
+        `--${mixed}--`,
+        "",
+      ].join("\r\n")
+    : `${alternativeParts}\r\n`;
+
   return [
     `From: ${encodeHeader(BRAND.name)} <${from}>`,
     `To: ${to}`,
@@ -249,12 +410,9 @@ export function buildMime({ from, to, order, receivedAt }) {
     `Date: ${new Date().toUTCString()}`,
     `Message-ID: <${crypto.randomUUID()}@${BRAND.site}>`,
     "MIME-Version: 1.0",
-    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    ics ? `Content-Type: multipart/mixed; boundary="${mixed}"` : alternativeHeader,
     "",
-    part("text/plain", renderText(order, receivedAt)),
-    part("text/html", renderHtml(order, receivedAt)),
-    `--${boundary}--`,
-    "",
+    body,
   ].join("\r\n");
 }
 

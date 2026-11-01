@@ -4,7 +4,7 @@
  * Cloudflare Email Routing (binding EMAIL, destinataire vérifié).
  */
 import { EmailMessage } from "cloudflare:email";
-import { buildMime, formatReceivedAt, parseOrder } from "./email.js";
+import { buildIcs, buildMime, formatReceivedAt, parseOrder } from "./email.js";
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -60,10 +60,30 @@ async function handleContact(request, env) {
   }
 }
 
+/** GET /api/agenda?… : renvoie le fichier .ics de la commande (bouton « Ajouter à mon agenda »). */
+function handleAgenda(request) {
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    return new Response("Méthode non autorisée.", { status: 405 });
+  }
+  const params = Object.fromEntries(new URL(request.url).searchParams);
+  const { data } = parseOrder(params);
+  const ics = data && buildIcs(data);
+  if (!ics) return new Response("Date de commande manquante ou invalide.", { status: 400 });
+
+  return new Response(ics, {
+    headers: {
+      "Content-Type": "text/calendar; charset=utf-8",
+      "Content-Disposition": 'inline; filename="commande-sesia.ics"',
+      "Cache-Control": "no-store",
+    },
+  });
+}
+
 const worker = {
   async fetch(request, env) {
     const { pathname } = new URL(request.url);
     if (pathname === "/api/contact") return handleContact(request, env);
+    if (pathname === "/api/agenda") return handleAgenda(request);
     return env.ASSETS.fetch(request);
   },
 };
