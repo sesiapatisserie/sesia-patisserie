@@ -1,0 +1,15 @@
+# Anciennes adresses du site Wix : redirections permanentes (301) pour
+# conserver le référencement. Les pages /number-cake, /nos-gateaux,
+# /nos-migniardises, /a-propos, /commander et /portfolio gardent leur URL.
+/services-4                          /creations                              301
+/portfolio-collections/*             /portfolio                              301
+/mentions-l%C3%A9gales               /mentions-legales                       301
+/politique-de-confidentialit%C3%A9   /mentions-legales#donnees-personnelles   301
+/politique-en-mati%C3%A8re-de-cookies /mentions-legales#cookies              301
+/conditions-d-utilisation            /mentions-legales                       301
+/galerie                             /portfolio                              301
+/contact                             /commander                              301
+/maison                              /a-propos                               301
+/sur-mesure                          /creations                              301
+/home                                /                                       301
+/blank                               /                                       301

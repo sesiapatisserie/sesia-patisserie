@@ -23,3 +23,6 @@ originals-wix/
 tsconfig.tsbuildinfo
 .vscode/
 .netlify/
+
+# Photos optimisées, générées au build (scripts/optimize-images.mjs)
+public/img/
