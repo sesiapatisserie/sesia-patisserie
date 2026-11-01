@@ -1,0 +1,12 @@
+{
+  // Déploiement du site statique (dossier out/) sur Cloudflare.
+  // Les fichiers public/_redirects et public/_headers sont pris en charge.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "sesia-patisserie",
+  "compatibility_date": "2025-09-01",
+  "assets": {
+    "directory": "./out",
+    "not_found_handling": "404-page",
+    "html_handling": "auto-trailing-slash"
+  }
+}
