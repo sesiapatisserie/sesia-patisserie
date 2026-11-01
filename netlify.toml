@@ -24,13 +24,6 @@
   [headers.values]
     Cache-Control = "public, max-age=2592000"
 
-# --- Domaine : tout rediriger vers www.sesia-patisserie.com -----------------
-[[redirects]]
-  from = "https://sesia-patisserie.com/*"
-  to = "https://www.sesia-patisserie.com/:splat"
-  status = 301
-  force = true
-
 # --- Anciennes adresses du site Wix (301 pour conserver le référencement) ---
 # Les pages /number-cake, /nos-gateaux, /nos-migniardises, /a-propos,
 # /commander et /portfolio gardent exactement leur URL d'origine.
