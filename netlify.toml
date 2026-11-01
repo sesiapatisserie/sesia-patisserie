@@ -1,6 +1,100 @@
 [build]
   command = "npm run build"
+  publish = "out"
 
 [build.environment]
   NODE_VERSION = "22"
   NEXT_PUBLIC_SITE_URL = "https://www.sesia-patisserie.com"
+
+# --- En-têtes de sécurité et de cache -------------------------------------
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    X-Frame-Options = "SAMEORIGIN"
+
+[[headers]]
+  for = "/_next/static/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+[[headers]]
+  for = "/photos/*"
+  [headers.values]
+    Cache-Control = "public, max-age=2592000"
+
+# --- Domaine : tout rediriger vers www.sesia-patisserie.com -----------------
+[[redirects]]
+  from = "https://sesia-patisserie.com/*"
+  to = "https://www.sesia-patisserie.com/:splat"
+  status = 301
+  force = true
+
+# --- Anciennes adresses du site Wix (301 pour conserver le référencement) ---
+# Les pages /number-cake, /nos-gateaux, /nos-migniardises, /a-propos,
+# /commander et /portfolio gardent exactement leur URL d'origine.
+[[redirects]]
+  from = "/services-4"
+  to = "/creations"
+  status = 301
+
+[[redirects]]
+  from = "/portfolio-collections/*"
+  to = "/portfolio"
+  status = 301
+
+[[redirects]]
+  from = "/mentions-légales"
+  to = "/mentions-legales"
+  status = 301
+
+[[redirects]]
+  from = "/politique-de-confidentialité"
+  to = "/mentions-legales#donnees-personnelles"
+  status = 301
+
+[[redirects]]
+  from = "/politique-en-matière-de-cookies"
+  to = "/mentions-legales#cookies"
+  status = 301
+
+[[redirects]]
+  from = "/conditions-d-utilisation"
+  to = "/mentions-legales"
+  status = 301
+
+[[redirects]]
+  from = "/galerie"
+  to = "/portfolio"
+  status = 301
+
+[[redirects]]
+  from = "/contact"
+  to = "/commander"
+  status = 301
+
+[[redirects]]
+  from = "/maison"
+  to = "/a-propos"
+  status = 301
+
+[[redirects]]
+  from = "/sur-mesure"
+  to = "/creations"
+  status = 301
+
+[[redirects]]
+  from = "/home"
+  to = "/"
+  status = 301
+
+[[redirects]]
+  from = "/blank"
+  to = "/"
+  status = 301
+
+[[headers]]
+  for = "/opengraph-image"
+  [headers.values]
+    Content-Type = "image/png"

@@ -6,6 +6,7 @@ import { photos, site } from "@/content/site";
 export const alt = `${site.name} — Créations personnalisées pour tous vos événements spéciaux`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
+export const dynamic = "force-static";
 
 export default async function OpengraphImage() {
   const photo = await readFile(path.join(process.cwd(), "public", photos.numberCake50.src));

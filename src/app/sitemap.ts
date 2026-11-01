@@ -2,6 +2,8 @@ import type { MetadataRoute } from "next";
 import { categories } from "@/content/site";
 import { absoluteUrl } from "@/lib/utils";
 
+export const dynamic = "force-static";
+
 export default function sitemap(): MetadataRoute.Sitemap {
   const routes = [
     { path: "/", priority: 1, changeFrequency: "monthly" as const },
