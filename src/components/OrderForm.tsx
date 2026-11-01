@@ -32,15 +32,15 @@ function estimate(product: string, people: number): string | null {
   return null;
 }
 
-/** Clé publique Web3Forms (envoi direct vers la boîte mail). Voir .env.example. */
+/** Clé publique Web3Forms (envoi de secours si le Worker est indisponible). Voir .env.example. */
 const accessKey = process.env.NEXT_PUBLIC_WEB3FORMS_KEY;
 
 type Status = "idle" | "sending" | "success" | "error";
 
 /**
- * Le formulaire envoie la demande directement à la boîte mail de la pâtisserie
- * via Web3Forms, sans quitter le site. Si aucune clé n'est configurée, il
- * retombe sur un e-mail pré-rempli ouvert dans la messagerie du visiteur.
+ * Le formulaire envoie la demande au Worker du site (POST /api/contact), qui
+ * adresse un e-mail soigné à la pâtisserie ; le visiteur ne quitte jamais la
+ * page. En secours, il passe par Web3Forms si une clé est configurée.
  */
 export function OrderForm() {
   const [product, setProduct] = useState(orderPage.products[0].value);
@@ -76,41 +76,77 @@ export function OrderForm() {
       .filter((line, i, all) => line !== "" || all[i - 1] !== "")
       .join("\n");
 
-    // Sans clé : repli sur la messagerie du visiteur.
-    if (!accessKey) {
-      window.location.href = `mailto:${contact.email}?subject=${encodeURIComponent(
-        subject,
-      )}&body=${encodeURIComponent(body)}`;
-      setStatus("success");
-      return;
-    }
-
     // Champ piège anti-spam : seuls les robots le remplissent.
     if (data.get("botcheck")) return;
 
     setStatus("sending");
+
+    // 1) Envoi principal : le Worker du site envoie un e-mail soigné à la pâtisserie.
+    const order = {
+      prenom: String(data.get("prenom") ?? ""),
+      nom: String(data.get("nom") ?? ""),
+      email: String(data.get("email") ?? ""),
+      telephone: String(data.get("telephone") ?? ""),
+      produit: product,
+      parfum: String(data.get("parfum") ?? ""),
+      quantiteLabel: peopleLabel,
+      quantite: String(data.get("personnes") ?? ""),
+      date: String(data.get("date") ?? ""),
+      heure: String(data.get("heure") ?? ""),
+      estimation: price ?? "",
+      message: String(data.get("message") ?? ""),
+    };
+
     try {
-      const response = await fetch("https://api.web3forms.com/submit", {
+      const response = await fetch("/api/contact", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json" },
-        body: JSON.stringify({
-          access_key: accessKey,
-          subject,
-          from_name: "Site Sesia Pâtisserie",
-          name: fullName,
-          email: String(data.get("email") ?? ""),
-          phone: String(data.get("telephone") ?? ""),
-          message: body,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(order),
       });
-      const result = (await response.json()) as { success?: boolean };
-      if (!response.ok || !result.success) throw new Error("envoi refusé");
-      form.reset();
-      setPeople("");
-      setStatus("success");
-    } catch {
-      setStatus("error");
+      if (response.ok) {
+        form.reset();
+        setPeople("");
+        setStatus("success");
+        return;
+      }
+      // Erreur de saisie : inutile de réessayer ailleurs.
+      if (response.status === 422) throw new Error("saisie invalide");
+    } catch (error) {
+      if (error instanceof Error && error.message === "saisie invalide") {
+        setStatus("error");
+        return;
+      }
     }
+
+    // 2) Secours : service d'envoi Web3Forms, si une clé est configurée.
+    if (accessKey) {
+      try {
+        const response = await fetch("https://api.web3forms.com/submit", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            access_key: accessKey,
+            subject,
+            from_name: "Site Sesia Pâtisserie",
+            name: fullName,
+            email: order.email,
+            phone: order.telephone,
+            message: body,
+          }),
+        });
+        const result = (await response.json()) as { success?: boolean };
+        if (response.ok && result.success) {
+          form.reset();
+          setPeople("");
+          setStatus("success");
+          return;
+        }
+      } catch {
+        /* on retombe sur le message d'erreur */
+      }
+    }
+
+    setStatus("error");
   }
 
   if (status === "success") {

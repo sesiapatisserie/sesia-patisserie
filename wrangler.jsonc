@@ -1,12 +1,22 @@
 {
-  // Déploiement du site statique (dossier out/) sur Cloudflare.
+  // Site statique (dossier out/) + envoi du formulaire de commande par e-mail.
   // Les fichiers public/_redirects et public/_headers sont pris en charge.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "sesia-patisserie",
+  "main": "worker/index.js",
   "compatibility_date": "2025-09-01",
   "assets": {
     "directory": "./out",
+    "binding": "ASSETS",
     "not_found_handling": "404-page",
-    "html_handling": "auto-trailing-slash"
+    "html_handling": "auto-trailing-slash",
+    "run_worker_first": ["/api/*"]
+  },
+  // Cloudflare Email Routing : l'adresse de destination doit être vérifiée
+  // (Email > Email Routing > Destination addresses).
+  "send_email": [{ "name": "EMAIL", "destination_address": "sesiapatisserie@gmail.com" }],
+  "vars": {
+    "MAIL_FROM": "commandes@sesia-patisserie.com",
+    "MAIL_TO": "sesiapatisserie@gmail.com"
   }
 }
